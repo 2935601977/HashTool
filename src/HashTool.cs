@@ -2474,7 +2474,9 @@ namespace HashTool
                         check(form.LastStatus.IndexOf("没有需要重算") >= 0,
                               "无变化时 F5 不重算：" + form.LastStatus);
                         note("改一个文件的内容，再 F5");
-                        File.AppendAllText(System.IO.Path.Combine(tree, "one.txt"), " + changed");
+                        // 改的是内容本来就唯一的 three.bin：这样 one.txt / two.txt 那对"重复文件"一直留着，
+                        // 最后导出的 JSON 里 duplicate_groups 应该始终是 1（CI 会校验这一点）。
+                        File.AppendAllText(System.IO.Path.Combine(tree, "sub", "three.bin"), " + changed");
                         form.RefreshForTest();
                         waiting = true;
                         step = 3;
