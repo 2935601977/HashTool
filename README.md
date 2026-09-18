@@ -7,10 +7,7 @@
 [![dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#)
 [![exe size](https://img.shields.io/badge/exe-~130%20KB-blue)](#)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-
-<!-- 推到 GitHub 之后，把下面这行的仓库路径换成你自己的，就有构建徽章了：
-[![build](https://github.com/<你的用户名>/HashTool/actions/workflows/build.yml/badge.svg)](https://github.com/<你的用户名>/HashTool/actions/workflows/build.yml)
--->
+[![build](https://github.com/2935601977/HashTool/actions/workflows/build.yml/badge.svg)](https://github.com/2935601977/HashTool/actions/workflows/build.yml)
 
 <img src="docs/icon.png" width="96" align="right" alt="HashTool icon">
 
