@@ -59,3 +59,62 @@ dist\HashTool.exe --screenshot docs\screenshot.png
 2. 提交：`git commit -m "release: v1.2.0"`
 3. 打 tag 并推送：`git tag v1.2.0 && git push origin main --tags`
 4. GitHub Actions 会自动编译、自检、把 `HashTool.exe` 和它的 SHA-256 附到 Release 上
+
+`release.yml` 只在推 `v*` 的 tag 时触发，平时的提交只会跑 `build.yml`（编译 + 自检，不发布）。
+想删掉打错的 tag：`git tag -d v1.2.0 && git push origin :refs/tags/v1.2.0`。
+
+## 搭建这个仓库时做了什么（以后照着来）
+
+### 环境事实
+
+| 项目 | 当时的情况 |
+| --- | --- |
+| 编译器 | `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`（系统自带，C# 5 编译器） |
+| Visual Studio / .NET SDK | **没装，也不需要**（所以故意没有 .sln / .csproj） |
+| 构建方式 | `build.bat` 里那一行 `csc` 命令就是全部构建逻辑 |
+| CI | GitHub Actions `windows-latest`，自带的 .NET Framework 足够编译 |
+| git 身份 | `wangxiaobao <2935601977@qq.com>`（写在仓库的 `.git/config` 里，只影响本仓库） |
+| 远端 | `git@github.com:2935601977/HashTool.git`（SSH，`~/.ssh/id_ed25519`） |
+
+### 踩过的坑（照着避开，能省不少时间）
+
+1. **PowerShell 脚本的编码**：Windows PowerShell 5.1 会把「没有 BOM 的 UTF-8 的 .ps1」
+   当成 GBK 读，中文注释直接导致语法错误。给 .ps1 加 UTF-8 BOM，或者把脚本写成纯 ASCII。
+2. **执行策略**：`.\xxx.ps1` 可能被 "禁止运行脚本" 拦下。用
+   `powershell -NoProfile -ExecutionPolicy Bypass -File xxx.ps1`，或者干脆用 `build.bat`。
+3. **csc 只吃 C# 5 语法**：字符串插值、`?.`、`out var`、局部函数、表达式体成员一律编译不过。
+4. **`/warnaserror` 要写数字**：`/warnaserror+:649`（不能写 `CS0649`，编译器不认）。
+5. **源码编码**：编译时要带 `/codepage:65001`，否则中文字符串会乱码。
+6. **Workflow 的 step 里只能用白名单键**（`name`/`run`/`shell`/`if`/`uses` 等）。
+   我曾在里面写了 `rem ...` 当注释——那是批处理写法，会让整个 workflow 判定为无效，
+   YAML 注释要用 `#`。
+7. **`--uitest` 默认会删掉测试目录**。CI 里要用它生成的文件做交叉校验，所以加了 `--keep`，
+   校验完再用 `if: always()` 的步骤清理。
+8. **.NET 的 `Icon` 类解不了 PNG 压缩的图标帧**，所以 `tools/make-icon.ps1` 里
+   小尺寸（16–64）用传统 DIB 帧、大尺寸（128/256）才用 PNG 帧。改图标时别把这段改坏。
+9. **控制台中文**：输出被重定向到管道/文件时，要用 UTF-8 的 `StreamWriter` 包一层，
+   否则中文在管道里会变成乱码（见 `Cli.SetupConsoleEncoding`）。
+10. **提交中文信息**：PowerShell 往 git 传中文参数容易被转码，
+    稳妥做法是把信息写进一个 UTF-8（无 BOM）的临时文件，然后 `git commit -F 文件`。
+
+### 日常改动流程（记住这五步就行）
+
+```bat
+:: 1. 改 src\HashTool.cs（只改这一个文件）
+:: 2. 编译
+build.bat
+
+:: 3. 自检
+dist\HashTool.exe --selftest
+dist\HashTool.exe --uitest .\ui_out
+
+:: 4. 动了界面就更新 README 截图
+dist\HashTool.exe --screenshot docs\screenshot.png
+
+:: 5. 提交推送，等 CI 变绿
+git add -A && git commit -m "fix: ..." && git push
+```
+
+CI 里已经包含：编译、`--selftest`、`--uitest`（13 项断言）、JSON 结构校验、
+**与系统 `Get-FileHash` 逐文件交叉校验**、生成界面截图并作为产物上传。
+推送后到仓库的 Actions 页面就能看到这轮的 exe 和截图。
