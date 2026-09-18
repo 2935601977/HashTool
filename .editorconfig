@@ -1,0 +1,27 @@
+# HashTool 代码风格（尽量少，但保持统一）
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+# 本项目刻意只使用 C# 5 语法，保证系统自带的 csc.exe（.NET Framework 4.x）能直接编译。
+# 也就是说：不要用字符串插值、?.、out var、局部函数、表达式体成员等新语法。
+
+[*.{yml,yaml,json}]
+indent_style = space
+indent_size = 2
+
+[*.{bat,cmd}]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+
+[*.md]
+trim_trailing_whitespace = false
+end_of_line = lf

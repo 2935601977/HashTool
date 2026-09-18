@@ -1,0 +1,29 @@
+# 编译产物
+dist/
+build/
+bin/
+obj/
+*.exe
+*.pdb
+*.obj
+*.res
+
+# 自检 / 截图跑出来的临时文件
+hashtool_uitest_tree_*/
+hashtool_shot_tree_*/
+hashtool_selftest_*
+ci_out*
+_*
+
+# 编辑器 / IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# 系统垃圾
+Thumbs.db
+desktop.ini
+.DS_Store

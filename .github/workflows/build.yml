@@ -1,0 +1,73 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: 编译 + 自检（Windows / 系统自带 csc.exe）
+    runs-on: windows-latest
+
+    steps:
+      - name: 取源码
+        uses: actions/checkout@v4
+
+      - name: 编译（不依赖任何 SDK，直接用 Windows 自带的 csc.exe）
+        shell: cmd
+        run: build.bat
+
+      - name: 自检（哈希已知向量 + 界面构造 + 递归扫描）
+        shell: cmd
+        run: dist\HashTool.exe --selftest
+
+      - name: 界面自测（13 项断言，含 F5 增量刷新与 Ctrl+C 复制）
+        shell: cmd
+        run: dist\HashTool.exe --uitest .\ci_out
+
+      - name: 校验导出的 JSON
+        shell: pwsh
+        run: |
+          $json = Get-Content .\ci_out.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($json.tool -ne 'HashTool')           { throw "tool 字段不对：$($json.tool)" }
+          if ($json.author -ne 'wangxiaobao')      { throw "author 字段不对：$($json.author)" }
+          if ($json.summary.file_count -ne 4)      { throw "应扫描到 4 个文件，实际 $($json.summary.file_count)" }
+          if ($json.summary.ok -ne 4)              { throw "应有 4 个文件成功，实际 $($json.summary.ok)" }
+          if ($json.summary.duplicate_groups -ne 1){ throw "应识别出 1 组重复，实际 $($json.summary.duplicate_groups)" }
+          if (-not $json.files[0].sha256)          { throw "sha256 为空" }
+          Write-Host "JSON 检查通过：$($json.summary.file_count) 个文件，$($json.summary.total_size_human)，$($json.summary.duplicate_groups) 组重复"
+
+      - name: 和系统 Get-FileHash 对照（外部可信来源）
+        shell: pwsh
+        run: |
+          $json = Get-Content .\ci_out.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $bad = 0
+          foreach ($f in $json.files) {
+            if ((Get-FileHash -Algorithm MD5    $f.path).Hash -ne $f.md5.ToUpperInvariant())    { $bad++ }
+            if ((Get-FileHash -Algorithm SHA256 $f.path).Hash -ne $f.sha256.ToUpperInvariant()) { $bad++ }
+          }
+          if ($bad -gt 0) { throw "有 $bad 处哈希和 Get-FileHash 不一致" }
+          Write-Host "全部 $($json.files.Count) 个文件的 MD5 / SHA-256 与系统 Get-FileHash 完全一致"
+
+      - name: 生成界面截图（顺便当产物留档，方便对照界面改动）
+        shell: cmd
+        run: dist\HashTool.exe --screenshot .\ci_screenshot.png
+
+      - name: 上传 exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: HashTool-exe
+          path: dist/HashTool.exe
+          if-no-files-found: error
+
+      - name: 上传界面截图
+        uses: actions/upload-artifact@v4
+        with:
+          name: HashTool-screenshot
+          path: ci_screenshot.png
+          if-no-files-found: error

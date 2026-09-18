@@ -1,0 +1,44 @@
+name: release
+
+# 打一个 v* 的 tag（例如 v1.1.0）就会自动编译并发布 Release，
+# 附带 HashTool.exe 和它的 SHA-256 校验文件。
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 编译并发布
+    runs-on: windows-latest
+
+    steps:
+      - name: 取源码
+        uses: actions/checkout@v4
+
+      - name: 编译
+        shell: cmd
+        run: build.bat
+
+      - name: 发布前自检
+        shell: cmd
+        run: dist\HashTool.exe --selftest
+
+      - name: 生成 SHA-256 校验文件
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash .\dist\HashTool.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  HashTool.exe" | Out-File .\dist\HashTool.exe.sha256 -Encoding ascii
+          Write-Host "HashTool.exe SHA-256 = $hash"
+
+      - name: 创建 Release 并附上 exe
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/HashTool.exe
+            dist/HashTool.exe.sha256
+          generate_release_notes: true
+          draft: false

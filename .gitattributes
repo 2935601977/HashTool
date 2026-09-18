@@ -1,0 +1,13 @@
+# 默认按文本处理，检出时用 Windows 换行（本项目只面向 Windows）
+* text=auto eol=crlf
+
+# 二进制资源，别让 git 动它们
+*.ico  binary
+*.png  binary
+*.exe  binary
+*.dll  binary
+
+# 这些文件在仓库里统一用 LF，方便在网页上 diff
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
