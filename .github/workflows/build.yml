@@ -26,9 +26,10 @@ jobs:
         shell: cmd
         run: dist\HashTool.exe --selftest
 
+      # --keep：保留自测生成的临时目录，下一步要拿这些真实文件去和系统 Get-FileHash 对照
       - name: 界面自测（13 项断言，含 F5 增量刷新与 Ctrl+C 复制）
         shell: cmd
-        run: dist\HashTool.exe --uitest .\ci_out
+        run: dist\HashTool.exe --uitest .\ci_out --keep
 
       - name: 校验导出的 JSON
         shell: pwsh
@@ -48,11 +49,17 @@ jobs:
           $json = Get-Content .\ci_out.json -Raw -Encoding UTF8 | ConvertFrom-Json
           $bad = 0
           foreach ($f in $json.files) {
-            if ((Get-FileHash -Algorithm MD5    $f.path).Hash -ne $f.md5.ToUpperInvariant())    { $bad++ }
-            if ((Get-FileHash -Algorithm SHA256 $f.path).Hash -ne $f.sha256.ToUpperInvariant()) { $bad++ }
+            if (-not (Test-Path -LiteralPath $f.path)) { throw "文件不存在：$($f.path)" }
+            if ((Get-FileHash -LiteralPath $f.path -Algorithm MD5).Hash    -ne $f.md5.ToUpperInvariant())    { $bad++ }
+            if ((Get-FileHash -LiteralPath $f.path -Algorithm SHA256).Hash -ne $f.sha256.ToUpperInvariant()) { $bad++ }
           }
           if ($bad -gt 0) { throw "有 $bad 处哈希和 Get-FileHash 不一致" }
           Write-Host "全部 $($json.files.Count) 个文件的 MD5 / SHA-256 与系统 Get-FileHash 完全一致"
+
+      - name: 清理自测产生的临时目录
+        if: always()
+        shell: pwsh
+        run: Remove-Item -Recurse -Force .\hashtool_uitest_tree_* -ErrorAction SilentlyContinue
 
       - name: 生成界面截图（顺便当产物留档，方便对照界面改动）
         shell: cmd

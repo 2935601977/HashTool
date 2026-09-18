@@ -2239,7 +2239,15 @@ namespace HashTool
                         return 0;
                     }
                     if (args[i] == "--selftest") return Cli.SelfTest();
-                    if (args[i] == "--uitest" && i + 1 < args.Length) return RunUiTest(args[i + 1]);
+                    if (args[i] == "--uitest" && i + 1 < args.Length)
+                    {
+                        bool keepTree = false;
+                        for (int k = i + 2; k < args.Length; k++)
+                        {
+                            if (args[k] == "--keep") keepTree = true;
+                        }
+                        return RunUiTest(args[i + 1], keepTree);
+                    }
                     if (args[i] == "--screenshot" && i + 1 < args.Length) return RunScreenshot(args[i + 1]);
                     if (args[i] == "--help" || args[i] == "-h")
                     {
@@ -2388,16 +2396,17 @@ namespace HashTool
         }
 
         /// <summary>
-        /// --uitest &lt;输出前缀&gt;
+        /// --uitest &lt;输出前缀&gt; [--keep]
         /// 全自动跑一遍界面链路，顺带验证「F5 只重算变化的文件」：
         ///   1) 造一棵临时目录（含重复文件）→ 添加 → 自动计算
         ///   2) 立刻 F5（没有变化）→ 应该一个都不重算
         ///   3) 改一个文件的内容 → F5 → 应该只重算 1 个
         ///   4) 加一个新文件 → F5 → 应该只新增 1 个
-        ///   5) 导出小写 / 大写两份 JSON，清掉临时目录
-        /// 每步的状态都会打印出来（用 HashTool-cli.exe 跑就能看到）。
+        ///   5) 导出小写 / 大写两份 JSON，默认清掉临时目录
+        /// 加 --keep 则保留临时目录（CI 里要拿这些文件去和系统 Get-FileHash 交叉校验）。
+        /// 每步的状态都会打印出来。
         /// </summary>
-        private static int RunUiTest(string outPrefix)
+        private static int RunUiTest(string outPrefix, bool keepTree)
         {
             Cli.SetupConsoleEncoding();
             Application.EnableVisualStyles();
@@ -2533,7 +2542,14 @@ namespace HashTool
 
             Application.Run(form);
 
-            try { if (Directory.Exists(tree)) Directory.Delete(tree, true); } catch (Exception) { }
+            if (keepTree)
+            {
+                Console.WriteLine("[uitest] --keep：保留测试目录 " + tree + "（核对完请自行删除）");
+            }
+            else
+            {
+                try { if (Directory.Exists(tree)) Directory.Delete(tree, true); } catch (Exception) { }
+            }
             Console.WriteLine("UITEST " + (result == 0 ? "OK" : "FAILED"));
             return result;
         }
