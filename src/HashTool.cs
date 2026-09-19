@@ -868,9 +868,10 @@ namespace HashTool
             root.Dock = DockStyle.Fill;
             root.ColumnCount = 1;
             root.RowCount = 6;
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(44F)));   // 按钮
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(42F)));   // 选项
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(38F)));   // 复制 / 筛选
+            // 前三行用 AutoSize：窗口窄的时候工具栏会自动换行，行高跟着长，不会把控件切掉
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // 按钮
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // 选项
+            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // 复制 / 筛选
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));      // 列表
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(150F)));  // 详情
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(62F)));   // 状态栏
@@ -881,7 +882,10 @@ namespace HashTool
             FlowLayoutPanel bar1 = _bar1;
             bar1.Dock = DockStyle.Fill;
             bar1.Padding = new Padding(S(8), S(6), S(8), 0);
-            bar1.WrapContents = false;
+            bar1.AutoSize = true;
+            bar1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            bar1.WrapContents = true;                    // 窗口窄时自动换行，行高跟着长，不切控件
+            bar1.MinimumSize = new Size(0, S(42));
             root.Controls.Add(bar1, 0, 0);
 
             _btnAddFiles = MakeButton("添加文件", delegate { AddFiles(); });
@@ -912,7 +916,10 @@ namespace HashTool
             FlowLayoutPanel bar2 = _bar2;
             bar2.Dock = DockStyle.Fill;
             bar2.Padding = new Padding(S(8), S(4), S(8), 0);
-            bar2.WrapContents = false;
+            bar2.AutoSize = true;
+            bar2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            bar2.WrapContents = true;
+            bar2.MinimumSize = new Size(0, S(40));
             root.Controls.Add(bar2, 0, 1);
 
             _chkRecursive = new CheckBox();
@@ -960,7 +967,10 @@ namespace HashTool
             FlowLayoutPanel bar3 = _bar3;
             bar3.Dock = DockStyle.Fill;
             bar3.Padding = new Padding(S(8), S(2), S(8), 0);
-            bar3.WrapContents = false;
+            bar3.AutoSize = true;
+            bar3.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            bar3.WrapContents = true;
+            bar3.MinimumSize = new Size(0, S(36));
             root.Controls.Add(bar3, 0, 2);
 
             bar3.Controls.Add(MakeLabel("Ctrl+C 复制：", 0));
@@ -2431,23 +2441,56 @@ namespace HashTool
         private static void AuditRow(FlowLayoutPanel panel, string name, List<string> problems)
         {
             if (panel == null) return;
-            int width = panel.Padding.Horizontal;
-            int height = panel.Padding.Vertical;
+            int available = panel.ClientSize.Width - panel.Padding.Horizontal;
+            if (available <= 0) return;
+
+            int totalWidth = 0;
+            int widestChild = 0;
+            int tallestChild = 0;
             for (int i = 0; i < panel.Controls.Count; i++)
             {
                 Control child = panel.Controls[i];
                 if (!child.Visible) continue;
-                width += child.Width + child.Margin.Horizontal;
-                height = Math.Max(height, child.Height + child.Margin.Vertical + panel.Padding.Top);
+                totalWidth += child.Width + child.Margin.Horizontal;
+                widestChild = Math.Max(widestChild, child.Width + child.Margin.Horizontal);
+                tallestChild = Math.Max(tallestChild, child.Height + child.Margin.Vertical);
             }
-            if (width > panel.ClientSize.Width)
+            if (tallestChild == 0) return;
+
+            // 单个控件本身就比整行还宽 —— 那不管换不换行都放不下
+            if (widestChild > available)
             {
-                problems.Add(name + "里的控件一共要 " + width + "px，但这一行只有 " + panel.ClientSize.Width + "px，右边会被裁掉");
+                problems.Add(name + "里有个控件要 " + widestChild + "px，比这一行可用的 " + available + "px 还宽");
             }
-            if (height > panel.ClientSize.Height)
+
+            // 允许换行时按行数算需要的高度；不允许换行时宽度一旦不够就是真的被裁掉了
+            int lines = 1;
+            if (panel.WrapContents)
             {
-                problems.Add(name + "内容高 " + height + "px，超过行高 " + panel.ClientSize.Height + "px，会被纵向裁掉");
+                lines = (int)Math.Ceiling((double)totalWidth / available);
+                if (lines < 1) lines = 1;
             }
+            else if (totalWidth > available)
+            {
+                problems.Add(name + "里的控件一共要 " + totalWidth + "px，但这一行只有 " + available + "px，右边会被裁掉");
+            }
+
+            int needed = lines * tallestChild + panel.Padding.Vertical;
+            if (needed > panel.ClientSize.Height)
+            {
+                problems.Add(name + "要 " + lines + " 行、共 " + needed + "px 高，但只有 " + panel.ClientSize.Height + "px，会被纵向裁掉");
+            }
+        }
+
+        /// <summary>
+        /// 测试用：把窗口调整到指定尺寸（用来验证小屏幕/窄窗口下的布局）。
+        /// 注意这里只能 PerformLayout，绝不能用 Application.DoEvents()：
+        /// DoEvents 会重新泵消息循环，导致自测用的计时器重入、步骤重复执行。
+        /// </summary>
+        public void ResizeForTest(int width, int height)
+        {
+            ClientSize = new Size(width, height);
+            PerformLayout();
         }
     }
 
@@ -2786,6 +2829,12 @@ namespace HashTool
                         // 界面布局：当前 DPI 下有没有文字被裁掉
                         string audit = form.LayoutAudit();
                         check(audit.Length == 0, "界面布局无裁剪" + (audit.Length > 0 ? "：" + audit : ""));
+
+                        // 小屏幕（或窗口被压窄）时：工具栏应该自动换行，而不是把按钮切掉
+                        form.ResizeForTest(form.MinimumSize.Width, form.MinimumSize.Height);
+                        string narrow = form.LayoutAudit();
+                        check(narrow.Length == 0, "窗口缩到最小尺寸也不裁" + (narrow.Length > 0 ? "：" + narrow : ""));
+                        form.ResizeForTest(1280, 760);
 
                         // 只算一个算法时，详情区要说清楚另一个没算
                         form.SetAlgorithm(2);                // 仅 SHA-256
