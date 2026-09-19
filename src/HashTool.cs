@@ -745,6 +745,11 @@ namespace HashTool
         private TextBox _txtFilter;
         private ListView _list;
         private TextBox _txtDetailName;
+        private FlowLayoutPanel _bar1;
+        private FlowLayoutPanel _bar2;
+        private FlowLayoutPanel _bar3;
+        private Button _btnCopyMd5;
+        private Button _btnCopySha;
         private TextBox _txtDetailMd5;
         private TextBox _txtDetailSha;
         private Label _lblFieldMd5;
@@ -753,10 +758,29 @@ namespace HashTool
         private Label _lblStatus;
         private ProgressBar _progress;
         private ContextMenuStrip _menu;
+        private ToolStripMenuItem _miCopyMd5;
+        private ToolStripMenuItem _miCopySha;
+        private ToolStripMenuItem _miCopyPath;
+        private ToolStripMenuItem _miCopyName;
+        private ToolStripMenuItem _miCopyTsv;
+        private ToolStripMenuItem _miCopyJson;
+        private ToolStripMenuItem _miCopyAllJson;
+        private ToolStripMenuItem _miRecomputeSel;
+        private ToolStripMenuItem _miRemoveSel;
+        private ToolStripMenuItem _miOpenExplorer;
+        private ToolStripMenuItem _miSelectAll;
 
         private const int ColIndex = 0, ColName = 1, ColSize = 2, ColTime = 3, ColMd5 = 4, ColSha = 5, ColState = 6, ColPath = 7;
 
         private bool _initializing = true;
+
+        // ---- DPI 相关 ----
+        private float _uiScale = 1f;
+
+        /// <summary>按屏幕缩放比例换算尺寸（96 DPI 时等于原值）。</summary>
+        private int S(int pixels) { return (int)Math.Round(pixels * _uiScale); }
+
+        private float S(float pixels) { return (float)Math.Round(pixels * _uiScale); }
 
         public MainForm()
         {
@@ -820,8 +844,20 @@ namespace HashTool
         {
             Text = Const.Title + "  v" + Const.Version;
             Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
-            ClientSize = new Size(1280, 760);
-            MinimumSize = new Size(1000, 600);
+
+            // 关掉 WinForms 的字体自动缩放：它按「设计时字体 vs 当前字体」算比例，
+            // 在 125%/150% 缩放的屏幕上会把整个布局按比例缩小（我实测缩到 0.84），
+            // 偏偏文字是按真实 DPI 画的 —— 结果就是容器变小、文字不变，控件被裁掉。
+            // 改成我们自己按 DPI 算尺寸（S()），文字相关的宽度一律实测。
+            AutoScaleMode = AutoScaleMode.None;
+            try
+            {
+                using (Graphics g = CreateGraphics()) { _uiScale = g.DpiX / 96f; }
+            }
+            catch (Exception) { _uiScale = 1f; }
+
+            ClientSize = new Size(S(1280), S(760));
+            MinimumSize = new Size(S(1000), S(600));
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
             AllowDrop = true;
@@ -832,18 +868,19 @@ namespace HashTool
             root.Dock = DockStyle.Fill;
             root.ColumnCount = 1;
             root.RowCount = 6;
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));   // 按钮
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));   // 选项
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));   // 筛选
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));   // 列表
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 140F));  // 详情
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));   // 状态栏
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(44F)));   // 按钮
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(42F)));   // 选项
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(38F)));   // 复制 / 筛选
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));      // 列表
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(150F)));  // 详情
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(62F)));   // 状态栏
             Controls.Add(root);
 
             // ---- 第一行：按钮 ----
-            FlowLayoutPanel bar1 = new FlowLayoutPanel();
+            _bar1 = new FlowLayoutPanel();
+            FlowLayoutPanel bar1 = _bar1;
             bar1.Dock = DockStyle.Fill;
-            bar1.Padding = new Padding(8, 6, 8, 0);
+            bar1.Padding = new Padding(S(8), S(6), S(8), 0);
             bar1.WrapContents = false;
             root.Controls.Add(bar1, 0, 0);
 
@@ -867,13 +904,14 @@ namespace HashTool
             hint.Text = "拖文件或文件夹进窗口即可添加 · 右键有复制菜单 · F5 刷新";
             hint.ForeColor = Color.FromArgb(110, 110, 110);
             hint.AutoSize = true;
-            hint.Margin = new Padding(24, 9, 0, 0);
+            hint.Margin = new Padding(S(24), S(9), 0, 0);
             bar1.Controls.Add(hint);
 
             // ---- 第二行：选项 ----
-            FlowLayoutPanel bar2 = new FlowLayoutPanel();
+            _bar2 = new FlowLayoutPanel();
+            FlowLayoutPanel bar2 = _bar2;
             bar2.Dock = DockStyle.Fill;
-            bar2.Padding = new Padding(8, 4, 8, 0);
+            bar2.Padding = new Padding(S(8), S(4), S(8), 0);
             bar2.WrapContents = false;
             root.Controls.Add(bar2, 0, 1);
 
@@ -881,53 +919,53 @@ namespace HashTool
             _chkRecursive.Text = "包含子文件夹（递归）";
             _chkRecursive.Checked = true;
             _chkRecursive.AutoSize = true;
-            _chkRecursive.Margin = new Padding(0, 6, 12, 0);
+            _chkRecursive.Margin = new Padding(0, S(6), S(12), 0);
             bar2.Controls.Add(_chkRecursive);
 
             bar2.Controls.Add(MakeLabel("线程数：", 4));
             _cmbWorkers = new ComboBox();
             _cmbWorkers.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbWorkers.Width = 70;
             _cmbWorkers.Items.AddRange(new object[] { "自动", "1", "2", "4", "8", "16" });
             _cmbWorkers.SelectedIndex = 0;
-            _cmbWorkers.Margin = new Padding(0, 3, 12, 0);
+            _cmbWorkers.Margin = new Padding(0, S(3), S(12), 0);
             bar2.Controls.Add(_cmbWorkers);
+            FitComboToItems(_cmbWorkers, "自动");   // 必须挂在父容器之后：这时才继承到窗体真实字体
 
             bar2.Controls.Add(MakeLabel("计算算法：", 4));
             _cmbAlgo = new ComboBox();
             _cmbAlgo.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbAlgo.Width = 130;
-            _cmbAlgo.Items.AddRange(new object[] { "MD5 + SHA-256", "仅 MD5（更快）", "仅 SHA-256" });
+            _cmbAlgo.Items.AddRange(new object[] { "MD5 + SHA-256", "仅 MD5", "仅 SHA-256" });
             _cmbAlgo.SelectedIndex = 0;
-            _cmbAlgo.Margin = new Padding(0, 3, 12, 0);
+            _cmbAlgo.Margin = new Padding(0, S(3), S(12), 0);
             _cmbAlgo.SelectedIndexChanged += delegate { OnAlgoChanged(); };
             bar2.Controls.Add(_cmbAlgo);
+            FitComboToItems(_cmbAlgo, "MD5 + SHA-256");
 
             bar2.Controls.Add(MakeLabel("哈希大小写：", 4));
             _radLower = new RadioButton();
             _radLower.Text = "小写";
             _radLower.Checked = true;
             _radLower.AutoSize = true;
-            _radLower.Margin = new Padding(0, 6, 4, 0);
+            _radLower.Margin = new Padding(0, S(6), S(4), 0);
             _radLower.CheckedChanged += delegate { OnCaseChanged(); };
             bar2.Controls.Add(_radLower);
             _radUpper = new RadioButton();
             _radUpper.Text = "大写";
             _radUpper.AutoSize = true;
-            _radUpper.Margin = new Padding(0, 6, 12, 0);
+            _radUpper.Margin = new Padding(0, S(6), S(12), 0);
             bar2.Controls.Add(_radUpper);
 
             // ---- 第三行：复制 / 刷新策略 / 筛选 ----
-            FlowLayoutPanel bar3 = new FlowLayoutPanel();
+            _bar3 = new FlowLayoutPanel();
+            FlowLayoutPanel bar3 = _bar3;
             bar3.Dock = DockStyle.Fill;
-            bar3.Padding = new Padding(8, 2, 8, 0);
+            bar3.Padding = new Padding(S(8), S(2), S(8), 0);
             bar3.WrapContents = false;
             root.Controls.Add(bar3, 0, 2);
 
             bar3.Controls.Add(MakeLabel("Ctrl+C 复制：", 0));
             _cmbCopy = new ComboBox();
             _cmbCopy.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cmbCopy.Width = 170;
             _cmbCopy.Items.AddRange(new object[] {
                 "仅 MD5（默认）",
                 "仅 SHA-256",
@@ -937,20 +975,21 @@ namespace HashTool
                 "整行（TSV）"
             });
             _cmbCopy.SelectedIndex = 0;
-            _cmbCopy.Margin = new Padding(0, 3, 12, 0);
+            _cmbCopy.Margin = new Padding(0, S(3), S(12), 0);
             bar3.Controls.Add(_cmbCopy);
+            FitComboToItems(_cmbCopy, "MD5 + SHA-256");
 
             _chkIncremental = new CheckBox();
             _chkIncremental.Text = "F5 只重算变化的文件";
             _chkIncremental.Checked = true;
             _chkIncremental.AutoSize = true;
-            _chkIncremental.Margin = new Padding(0, 6, 12, 0);
+            _chkIncremental.Margin = new Padding(0, S(6), S(12), 0);
             bar3.Controls.Add(_chkIncremental);
 
             bar3.Controls.Add(MakeLabel("筛选：", 4));
             _txtFilter = new TextBox();
-            _txtFilter.Width = 240;
-            _txtFilter.Margin = new Padding(0, 3, 12, 0);
+            _txtFilter.Width = S(240);
+            _txtFilter.Margin = new Padding(0, S(3), S(12), 0);
             _txtFilter.TextChanged += delegate { RebuildView(); };
             bar3.Controls.Add(_txtFilter);
 
@@ -969,19 +1008,21 @@ namespace HashTool
             _list.AllowDrop = true;
             _list.DragEnter += OnDragEnter;
             _list.DragDrop += OnDragDrop;
-            _list.Columns.Add("序", 46, HorizontalAlignment.Center);
-            _list.Columns.Add("文件名", 250, HorizontalAlignment.Left);
-            _list.Columns.Add("大小", 92, HorizontalAlignment.Right);
-            _list.Columns.Add("修改时间", 150, HorizontalAlignment.Center);
-            _list.Columns.Add("MD5", 280, HorizontalAlignment.Left);
-            _list.Columns.Add("SHA-256", 520, HorizontalAlignment.Left);
-            _list.Columns.Add("状态", 100, HorizontalAlignment.Center);
-            _list.Columns.Add("路径", 460, HorizontalAlignment.Left);
-            _list.Margin = new Padding(8, 4, 8, 0);
+            // 列宽也按内容实测：MD5 是 32 位、SHA-256 是 64 位十六进制，
+            // 在 125%/150% 缩放下写死的宽度会把哈希截断，所以先量再定。
+            _list.Columns.Add("序", S(46), HorizontalAlignment.Center);
+            _list.Columns.Add("文件名", S(250), HorizontalAlignment.Left);
+            _list.Columns.Add("大小", S(92), HorizontalAlignment.Right);
+            _list.Columns.Add("修改时间", ColumnWidth("2026-09-19 22:55:02", 150), HorizontalAlignment.Center);
+            _list.Columns.Add("MD5", ColumnWidth(new string('0', 32), 280), HorizontalAlignment.Left);
+            _list.Columns.Add("SHA-256", ColumnWidth(new string('0', 64), 520), HorizontalAlignment.Left);
+            _list.Columns.Add("状态", S(110), HorizontalAlignment.Center);
+            _list.Columns.Add("路径", S(460), HorizontalAlignment.Left);
+            _list.Margin = new Padding(S(8), S(4), S(8), 0);
 
             Panel listPanel = new Panel();
             listPanel.Dock = DockStyle.Fill;
-            listPanel.Padding = new Padding(8, 4, 8, 0);
+            listPanel.Padding = new Padding(S(8), S(4), S(8), 0);
             listPanel.Controls.Add(_list);
             root.Controls.Add(listPanel, 0, 3);
 
@@ -989,7 +1030,7 @@ namespace HashTool
             GroupBox detail = new GroupBox();
             detail.Text = "选中文件详情";
             detail.Dock = DockStyle.Fill;
-            detail.Margin = new Padding(8, 6, 8, 0);
+            detail.Margin = new Padding(S(8), S(6), S(8), 0);
             detail.AllowDrop = true;
             detail.DragEnter += OnDragEnter;
             detail.DragDrop += OnDragDrop;
@@ -997,7 +1038,7 @@ namespace HashTool
 
             TableLayoutPanel grid = new TableLayoutPanel();
             grid.Dock = DockStyle.Fill;
-            grid.Padding = new Padding(6, 4, 6, 4);
+            grid.Padding = new Padding(S(6), S(4), S(6), S(4));
             grid.ColumnCount = 3;
             grid.RowCount = 3;
             // 标签列按内容自适应：高 DPI 下也不会把"SHA-256"挤成两行
@@ -1011,23 +1052,23 @@ namespace HashTool
             _txtDetailName.BorderStyle = BorderStyle.None;
             _txtDetailName.Dock = DockStyle.Fill;
             _txtDetailName.BackColor = SystemColors.Control;
-            _txtDetailName.Margin = new Padding(3, 2, 3, 4);
+            _txtDetailName.Margin = new Padding(S(3), S(2), S(3), S(4));
             grid.Controls.Add(_txtDetailName, 0, 0);
             grid.SetColumnSpan(_txtDetailName, 3);
 
             grid.Controls.Add(MakeFieldLabel("MD5", out _lblFieldMd5), 0, 1);
             _txtDetailMd5 = MakeReadOnlyBox("Consolas");
             grid.Controls.Add(_txtDetailMd5, 1, 1);
-            Button copyMd5 = MakeButton("复制", delegate { CopyValue(true, false); });
-            copyMd5.Width = 80;
-            grid.Controls.Add(copyMd5, 2, 1);
+            _btnCopyMd5 = MakeButton("复制", delegate { CopyValue(true, false); });
+            _btnCopyMd5.Width = S(80);
+            grid.Controls.Add(_btnCopyMd5, 2, 1);
 
             grid.Controls.Add(MakeFieldLabel("SHA-256", out _lblFieldSha), 0, 2);
             _txtDetailSha = MakeReadOnlyBox("Consolas");
             grid.Controls.Add(_txtDetailSha, 1, 2);
-            Button copySha = MakeButton("复制", delegate { CopyValue(false, true); });
-            copySha.Width = 80;
-            grid.Controls.Add(copySha, 2, 2);
+            _btnCopySha = MakeButton("复制", delegate { CopyValue(false, true); });
+            _btnCopySha.Width = S(80);
+            grid.Controls.Add(_btnCopySha, 2, 2);
 
             // ---- 第六行：状态栏 + 进度条 ----
             Panel status = new Panel();
@@ -1038,14 +1079,14 @@ namespace HashTool
             _lblSummary = new Label();
             _lblSummary.Text = "文件 0 · 完成 0 · 失败 0 · 合计 0 B";
             _lblSummary.AutoSize = true;
-            _lblSummary.Location = new Point(12, 6);
+            _lblSummary.Location = new Point(S(12), S(6));
             status.Controls.Add(_lblSummary);
 
             _lblStatus = new Label();
             _lblStatus.Text = "就绪：把文件或文件夹拖进窗口，或点击「添加文件 / 添加文件夹」。";
             _lblStatus.AutoSize = true;
             _lblStatus.ForeColor = Color.FromArgb(90, 90, 90);
-            _lblStatus.Location = new Point(420, 6);
+            _lblStatus.Location = new Point(S(420), S(6));
             status.Controls.Add(_lblStatus);
 
             _progress = new ProgressBar();
@@ -1053,13 +1094,13 @@ namespace HashTool
             _progress.Maximum = 1000;
             _progress.Value = 0;
             _progress.Dock = DockStyle.Bottom;
-            _progress.Height = 14;
+            _progress.Height = S(14);
             status.Controls.Add(_progress);
             _progress.BringToFront();
 
             status.Resize += delegate
             {
-                _lblStatus.Location = new Point(Math.Max(420, status.Width - _lblStatus.Width - 16), 6);
+                _lblStatus.Location = new Point(Math.Max(S(420), status.Width - _lblStatus.Width - S(16)), S(6));
             };
 
             BuildContextMenu();
@@ -1069,69 +1110,145 @@ namespace HashTool
             _timer.Tick += delegate { PumpEvents(); };
         }
 
-        private static Button MakeButton(string text, EventHandler handler)
+        private Button MakeButton(string text, EventHandler handler)
         {
             Button button = new Button();
             button.Text = text;
             button.AutoSize = true;
             button.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            button.MinimumSize = new Size(84, 28);
-            button.Margin = new Padding(0, 0, 6, 0);
+            button.MinimumSize = new Size(S(84), S(28));
+            button.Margin = new Padding(0, 0, S(6), 0);
             button.Click += handler;
             return button;
         }
 
-        private static Label MakeLabel(string text, int leftMargin)
+        private Label MakeLabel(string text, int leftMargin)
         {
             Label label = new Label();
             label.Text = text;
             label.AutoSize = true;
-            label.Margin = new Padding(leftMargin, 9, 2, 0);
+            label.Margin = new Padding(leftMargin, S(9), 2, 0);
             return label;
         }
 
         /// <summary>详情区左侧字段名：自适应宽度、单行、永不折行。</summary>
-        private static Label MakeFieldLabel(string text, out Label reference)
+        private Label MakeFieldLabel(string text, out Label reference)
         {
             Label label = new Label();
             label.Text = text;
             label.AutoSize = true;
             label.TextAlign = ContentAlignment.MiddleLeft;
             label.Anchor = AnchorStyles.Left;
-            label.Margin = new Padding(3, 8, 8, 0);
+            label.Margin = new Padding(S(3), S(8), S(8), 0);
             reference = label;
             return label;
         }
 
-        private static TextBox MakeReadOnlyBox(string fontName)
+        /// <summary>
+        /// 让下拉框宽度刚好放得下最长的那个选项（含下拉箭头和边距）。
+        /// 写死宽度在不同 DPI / 字体下会被裁掉文字，所以改成运行时量一遍。
+        /// </summary>
+        private static void FitComboToItems(ComboBox combo, string fallback)
+        {
+            int widest = 0;
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                string text = combo.Items[i] as string;
+                if (string.IsNullOrEmpty(text)) continue;
+                widest = Math.Max(widest, TextRenderer.MeasureText(text, combo.Font).Width);
+            }
+            if (widest == 0 && !string.IsNullOrEmpty(fallback))
+            {
+                widest = TextRenderer.MeasureText(fallback, combo.Font).Width;
+            }
+            combo.Width = widest + SystemInformation.VerticalScrollBarWidth + 12;
+        }
+
+        /// <summary>按示例文字的实测宽度定列宽（留 15% 余量），至少不小于 minimum。</summary>
+        private int ColumnWidth(string sample, int minimum)
+        {
+            int need = (int)(TextRenderer.MeasureText(sample, _list.Font).Width * 1.15) + S(16);
+            return Math.Max(S(minimum), need);
+        }
+
+        private TextBox MakeReadOnlyBox(string fontName)
         {
             TextBox box = new TextBox();
             box.ReadOnly = true;
             box.Dock = DockStyle.Fill;
             box.Font = new Font(fontName, 9.5F, FontStyle.Regular, GraphicsUnit.Point);
-            box.Margin = new Padding(3, 3, 3, 3);
+            box.Margin = new Padding(S(3), S(3), S(3), S(3));
             return box;
         }
 
         private void BuildContextMenu()
         {
             _menu = new ContextMenuStrip();
-            _menu.Items.Add(MakeMenuItem("复制 MD5", delegate { CopyValue(true, false); }));
-            _menu.Items.Add(MakeMenuItem("复制 SHA-256", delegate { CopyValue(false, true); }));
-            _menu.Items.Add(MakeMenuItem("复制 路径", delegate { CopyPath(); }));
-            _menu.Items.Add(MakeMenuItem("复制 文件名", delegate { CopyName(); }));
+            _miCopyMd5 = MakeMenuItem("复制 MD5", delegate { CopyValue(true, false); });
+            _miCopySha = MakeMenuItem("复制 SHA-256", delegate { CopyValue(false, true); });
+            _miCopyPath = MakeMenuItem("复制 路径", delegate { CopyPath(); });
+            _miCopyName = MakeMenuItem("复制 文件名", delegate { CopyName(); });
+            _miCopyTsv = MakeMenuItem("复制选中行（TSV，可直接粘到 Excel）", delegate { CopyRowsTsv(); });
+            _miCopyJson = MakeMenuItem("复制选中行（JSON）", delegate { CopyRowsJson(); });
+            _miCopyAllJson = MakeMenuItem("复制全部（JSON）", delegate { CopyAllJson(); });
+            _miRecomputeSel = MakeMenuItem("重新计算选中", delegate { RecomputeSelected(); });
+            _miRemoveSel = MakeMenuItem("移除选中", delegate { RemoveSelected(); });
+            _miOpenExplorer = MakeMenuItem("在资源管理器中打开", delegate { OpenInExplorer(); });
+            _miSelectAll = MakeMenuItem("全选", delegate { SelectAll(); });
+
+            _menu.Items.Add(_miCopyMd5);
+            _menu.Items.Add(_miCopySha);
+            _menu.Items.Add(_miCopyPath);
+            _menu.Items.Add(_miCopyName);
             _menu.Items.Add(new ToolStripSeparator());
-            _menu.Items.Add(MakeMenuItem("复制选中行（TSV，可直接粘到 Excel）", delegate { CopyRowsTsv(); }));
-            _menu.Items.Add(MakeMenuItem("复制选中行（JSON）", delegate { CopyRowsJson(); }));
-            _menu.Items.Add(MakeMenuItem("复制全部（JSON）", delegate { CopyAllJson(); }));
+            _menu.Items.Add(_miCopyTsv);
+            _menu.Items.Add(_miCopyJson);
+            _menu.Items.Add(_miCopyAllJson);
             _menu.Items.Add(new ToolStripSeparator());
-            _menu.Items.Add(MakeMenuItem("重新计算选中", delegate { RecomputeSelected(); }));
-            _menu.Items.Add(MakeMenuItem("移除选中", delegate { RemoveSelected(); }));
+            _menu.Items.Add(_miRecomputeSel);
+            _menu.Items.Add(_miRemoveSel);
             _menu.Items.Add(new ToolStripSeparator());
-            _menu.Items.Add(MakeMenuItem("在资源管理器中打开", delegate { OpenInExplorer(); }));
-            _menu.Items.Add(MakeMenuItem("全选", delegate { SelectAll(); }));
-            _menu.Opening += delegate { UpdateDetails(); };
+            _menu.Items.Add(_miOpenExplorer);
+            _menu.Items.Add(_miSelectAll);
+
+            // 每次弹出前按当前选中情况决定哪些能用、哪些灰掉
+            _menu.Opening += delegate
+            {
+                UpdateDetails();
+                UpdateMenuState();
+            };
             _list.ContextMenuStrip = _menu;
+        }
+
+        /// <summary>
+        /// 菜单项能不能点，取决于「有没有选中行」和「选中的行有没有哈希值」。
+        /// 一条都没选中时，"复制路径""移除选中"这类是灰的，避免点了没反应。
+        /// </summary>
+        private void UpdateMenuState()
+        {
+            bool hasSelection = _list.SelectedIndices.Count > 0;
+            bool anyMd5 = false;
+            bool anySha = false;
+            for (int i = 0; i < _list.SelectedIndices.Count; i++)
+            {
+                int position = _list.SelectedIndices[i];
+                if (position < 0 || position >= _view.Count) continue;
+                FileEntry entry = _entries[_view[position]];
+                if (entry.Md5.Length > 0) anyMd5 = true;
+                if (entry.Sha256.Length > 0) anySha = true;
+            }
+
+            _miCopyMd5.Enabled = hasSelection && anyMd5;
+            _miCopySha.Enabled = hasSelection && anySha;
+            _miCopyPath.Enabled = hasSelection;
+            _miCopyName.Enabled = hasSelection;
+            _miCopyTsv.Enabled = hasSelection;
+            _miCopyJson.Enabled = hasSelection;
+            _miRecomputeSel.Enabled = hasSelection;
+            _miRemoveSel.Enabled = hasSelection;
+            _miOpenExplorer.Enabled = hasSelection;
+            _miCopyAllJson.Enabled = _entries.Count > 0;
+            _miSelectAll.Enabled = _view.Count > 0;
         }
 
         private static ToolStripMenuItem MakeMenuItem(string text, EventHandler handler)
@@ -1888,17 +2005,40 @@ namespace HashTool
             if (position < 0)
             {
                 _txtDetailName.Text = "未选择文件";
-                _txtDetailMd5.Text = "";
-                _txtDetailSha.Text = "";
+                ShowHashField(_lblFieldMd5, _txtDetailMd5, _btnCopyMd5, WantMd5, "", false, "MD5");
+                ShowHashField(_lblFieldSha, _txtDetailSha, _btnCopySha, WantSha256, "", false, "SHA-256");
                 return;
             }
             FileEntry entry = _entries[_view[position]];
             _txtDetailName.Text = entry.Name + "    " + Const.HumanSize(entry.Size) + "    " +
                                   entry.ModifiedText() + "    [" + entry.StateText() + "]" +
                                   (entry.Error.Length > 0 ? "  " + entry.Error : "");
-            // 未启用的算法留空（不是 "-"），避免把占位符复制出去
-            _txtDetailMd5.Text = !WantMd5 ? "" : (_radUpper.Checked ? entry.Md5.ToUpperInvariant() : entry.Md5);
-            _txtDetailSha.Text = !WantSha256 ? "" : (_radUpper.Checked ? entry.Sha256.ToUpperInvariant() : entry.Sha256);
+
+            bool upper = _radUpper.Checked;
+            ShowHashField(_lblFieldMd5, _txtDetailMd5, _btnCopyMd5, WantMd5, entry.Md5, upper, "MD5");
+            ShowHashField(_lblFieldSha, _txtDetailSha, _btnCopySha, WantSha256, entry.Sha256, upper, "SHA-256");
+        }
+
+        /// <summary>
+        /// 详情区的两个哈希框：没启用的算法不显示假的空值，而是明确写「未计算」并灰掉，
+        /// 同时把对应的「复制」按钮禁用（避免复制出一个空串或者占位文字）。
+        /// 保留两行不隐藏，是为了切换算法时下面的版面不会跳来跳去。
+        /// </summary>
+        private static void ShowHashField(Label label, TextBox box, Button copyButton,
+                                          bool active, string value, bool upper, string name)
+        {
+            if (label != null) label.ForeColor = active ? SystemColors.ControlText : SystemColors.GrayText;
+            if (copyButton != null) copyButton.Enabled = active;
+            if (box == null) return;
+
+            if (!active)
+            {
+                box.ForeColor = SystemColors.GrayText;
+                box.Text = "（未计算：当前算法只算 " + (name == "MD5" ? "SHA-256" : "MD5") + "）";
+                return;
+            }
+            box.ForeColor = SystemColors.WindowText;
+            box.Text = upper ? value.ToUpperInvariant() : value;
         }
 
         private int CurrentViewPosition()
@@ -1923,7 +2063,7 @@ namespace HashTool
         private void SetStatus(string text)
         {
             _lblStatus.Text = text;
-            _lblStatus.Location = new Point(Math.Max(420, _lblStatus.Parent.ClientSize.Width - _lblStatus.Width - 16), 6);
+            _lblStatus.Location = new Point(Math.Max(S(420), _lblStatus.Parent.ClientSize.Width - _lblStatus.Width - S(16)), S(6));
         }
 
         // ------------------------------------------------------------ 复制 / 导出
@@ -2233,6 +2373,82 @@ namespace HashTool
                 return false;
             }
         }
+
+        public void ClearSelectionForTest() { _list.SelectedIndices.Clear(); }
+
+        /// <summary>测试用：右键菜单当前的可点状态。</summary>
+        public string MenuStateForTest()
+        {
+            UpdateMenuState();
+            return "sel=" + _list.SelectedIndices.Count +
+                   " md5=" + (_miCopyMd5.Enabled ? "1" : "0") +
+                   " sha=" + (_miCopySha.Enabled ? "1" : "0") +
+                   " path=" + (_miCopyPath.Enabled ? "1" : "0") +
+                   " tsv=" + (_miCopyTsv.Enabled ? "1" : "0") +
+                   " all=" + (_miCopyAllJson.Enabled ? "1" : "0");
+        }
+
+        /// <summary>测试用：详情区两个哈希框当前显示的文字。</summary>
+        public string DetailFieldsForTest()
+        {
+            return "md5=[" + _txtDetailMd5.Text + "] sha=[" + _txtDetailSha.Text +
+                   "] md5copy=" + (_btnCopyMd5.Enabled ? "1" : "0") +
+                   " shacopy=" + (_btnCopySha.Enabled ? "1" : "0");
+        }
+
+        /// <summary>
+        /// 界面布局自检：在当前 DPI 和字体下，有没有控件被裁掉（文字显示不全、行高不够）。
+        /// 返回空字符串表示没问题。不同缩放比例（125% / 150%）下最容易出问题，所以做成自动检查。
+        /// </summary>
+        public string LayoutAudit()
+        {
+            List<string> problems = new List<string>();
+            AuditCombo(_cmbAlgo, "「计算算法」下拉框", problems);
+            AuditCombo(_cmbCopy, "「Ctrl+C 复制」下拉框", problems);
+            AuditCombo(_cmbWorkers, "「线程数」下拉框", problems);
+            AuditRow(_bar1, "第一行（按钮）", problems);
+            AuditRow(_bar2, "第二行（选项）", problems);
+            AuditRow(_bar3, "第三行（复制/筛选）", problems);
+            return string.Join("；", problems.ToArray());
+        }
+
+        private static void AuditCombo(ComboBox combo, string name, List<string> problems)
+        {
+            if (combo == null) return;
+            int need = 0;
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                string text = combo.Items[i] as string;
+                if (!string.IsNullOrEmpty(text)) need = Math.Max(need, TextRenderer.MeasureText(text, combo.Font).Width);
+            }
+            need += SystemInformation.VerticalScrollBarWidth + 8;
+            if (combo.Width < need)
+            {
+                problems.Add(name + "宽 " + combo.Width + "px，放不下最长的选项（需要 " + need + "px）");
+            }
+        }
+
+        private static void AuditRow(FlowLayoutPanel panel, string name, List<string> problems)
+        {
+            if (panel == null) return;
+            int width = panel.Padding.Horizontal;
+            int height = panel.Padding.Vertical;
+            for (int i = 0; i < panel.Controls.Count; i++)
+            {
+                Control child = panel.Controls[i];
+                if (!child.Visible) continue;
+                width += child.Width + child.Margin.Horizontal;
+                height = Math.Max(height, child.Height + child.Margin.Vertical + panel.Padding.Top);
+            }
+            if (width > panel.ClientSize.Width)
+            {
+                problems.Add(name + "里的控件一共要 " + width + "px，但这一行只有 " + panel.ClientSize.Width + "px，右边会被裁掉");
+            }
+            if (height > panel.ClientSize.Height)
+            {
+                problems.Add(name + "内容高 " + height + "px，超过行高 " + panel.ClientSize.Height + "px，会被纵向裁掉");
+            }
+        }
     }
 
     // ========================================================================
@@ -2388,7 +2604,22 @@ namespace HashTool
                             form.DrawToBitmap(bmp, new Rectangle(0, 0, bmp.Width, bmp.Height));
                             string dir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(outPath));
                             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                            bmp.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+
+                            // 高 DPI 下窗口本身会变大，README 用不到那么大，超过 1400px 就等比缩一下
+                            Bitmap output = bmp;
+                            if (bmp.Width > 1400)
+                            {
+                                int width = 1400;
+                                int height = (int)Math.Round(bmp.Height * (1400.0 / bmp.Width));
+                                output = new Bitmap(width, height);
+                                using (Graphics g = Graphics.FromImage(output))
+                                {
+                                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                                    g.DrawImage(bmp, 0, 0, width, height);
+                                }
+                            }
+                            try { output.Save(outPath, System.Drawing.Imaging.ImageFormat.Png); }
+                            finally { if (output != bmp) output.Dispose(); }
                         }
                         Console.WriteLine("[screenshot] 已保存 " + outPath);
                         result = 0;
@@ -2539,6 +2770,29 @@ namespace HashTool
                         form.CopyForShortcutForTest();
                         check(form.ClipboardTextForTest().StartsWith("文件名\t"), "整行 TSV 模式带表头");
                         check(form.DetailLayoutOk(), "详情区布局（" + form.DetailLayoutDiagnostics() + "）");
+
+                        // 右键菜单：没选中时该灰的项要灰掉
+                        form.ClearSelectionForTest();
+                        string none = form.MenuStateForTest();
+                        check(none.IndexOf("sel=0") >= 0 && none.IndexOf("path=0") >= 0 && none.IndexOf("tsv=0") >= 0,
+                              "没选中时菜单项被禁用：" + none);
+                        form.SelectRowForTest(0);
+                        string one = form.MenuStateForTest();
+                        check(one.IndexOf("sel=1") >= 0 && one.IndexOf("path=1") >= 0 && one.IndexOf("tsv=1") >= 0,
+                              "选中后菜单项恢复可用：" + one);
+                        check(one.IndexOf("md5=1") >= 0 && one.IndexOf("sha=1") >= 0,
+                              "选中且算完时「复制 MD5/SHA-256」可用：" + one);
+
+                        // 界面布局：当前 DPI 下有没有文字被裁掉
+                        string audit = form.LayoutAudit();
+                        check(audit.Length == 0, "界面布局无裁剪" + (audit.Length > 0 ? "：" + audit : ""));
+
+                        // 只算一个算法时，详情区要说清楚另一个没算
+                        form.SetAlgorithm(2);                // 仅 SHA-256
+                        string onlySha = form.DetailFieldsForTest();
+                        check(onlySha.IndexOf("未计算") >= 0 && onlySha.IndexOf("md5copy=0") >= 0,
+                              "只算 SHA-256 时 MD5 框明确标注未计算并禁用复制：" + onlySha);
+                        form.SetAlgorithm(0);                // 恢复成两个都算
                         note("导出小写 / 大写 JSON");
                         bool lowerOk = form.ExportTo(outPrefix + ".json");
                         form.SetUpperCase(true);
