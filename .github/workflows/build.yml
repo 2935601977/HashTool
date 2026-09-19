@@ -27,9 +27,25 @@ jobs:
         run: dist\HashTool.exe --selftest
 
       # --keep：保留自测生成的临时目录，下一步要拿这些真实文件去和系统 Get-FileHash 对照
-      - name: 界面自测（13 项断言，含 F5 增量刷新与 Ctrl+C 复制）
+      - name: 界面自测（20 项断言，含 F5 增量刷新、Ctrl+C 复制、界面布局）
         shell: cmd
-        run: dist\HashTool.exe --uitest .\ci_out --keep
+        run: dist\HashTool.exe --uitest .\ci_out --keep > uitest.log 2>&1
+
+      # 自测挂了的时候，把失败的那几行打成注解：这样在 GitHub 网页上、
+      # 甚至用公开 API 都能看到是哪条断言没过，不用登录翻日志。
+      - name: 自测失败时暴露失败明细
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path .\uitest.log) {
+            $lines = Get-Content .\uitest.log -Encoding UTF8
+            $lines | Select-Object -Last 30
+            foreach ($line in ($lines | Where-Object { $_ -match 'FAIL|失败' })) {
+              Write-Host "::error::$line"
+            }
+          } else {
+            Write-Host "::error::没有生成 uitest.log，界面自测可能没跑起来"
+          }
 
       - name: 校验导出的 JSON
         shell: pwsh

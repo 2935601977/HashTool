@@ -748,6 +748,7 @@ namespace HashTool
         private FlowLayoutPanel _bar1;
         private FlowLayoutPanel _bar2;
         private FlowLayoutPanel _bar3;
+        private TableLayoutPanel _root;
         private Button _btnCopyMd5;
         private Button _btnCopySha;
         private TextBox _txtDetailMd5;
@@ -856,6 +857,17 @@ namespace HashTool
             }
             catch (Exception) { _uiScale = 1f; }
 
+            // 测试用：可以强制指定缩放比例，方便在本机复现别的 DPI 下的布局
+            // （例如 HASHTOOL_UI_SCALE=1.0 来模拟 100% 缩放、复现 CI 上的表现）
+            string forcedScale = Environment.GetEnvironmentVariable("HASHTOOL_UI_SCALE");
+            float parsedScale;
+            if (!string.IsNullOrEmpty(forcedScale) &&
+                float.TryParse(forcedScale, NumberStyles.Float, CultureInfo.InvariantCulture, out parsedScale) &&
+                parsedScale > 0.1f)
+            {
+                _uiScale = parsedScale;
+            }
+
             ClientSize = new Size(S(1280), S(760));
             MinimumSize = new Size(S(1000), S(600));
             StartPosition = FormStartPosition.CenterScreen;
@@ -868,23 +880,24 @@ namespace HashTool
             root.Dock = DockStyle.Fill;
             root.ColumnCount = 1;
             root.RowCount = 6;
-            // 前三行用 AutoSize：窗口窄的时候工具栏会自动换行，行高跟着长，不会把控件切掉
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // 按钮
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // 选项
-            root.RowStyles.Add(new RowStyle(SizeType.AutoSize));          // 复制 / 筛选
+            // 前三行的高度由 AdjustToolbarRows() 按实际宽度动态算：
+            // 窗口窄的时候工具栏换行，行高跟着长，不会把控件切掉。
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(44F)));   // 按钮
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(42F)));   // 选项
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(38F)));   // 复制 / 筛选
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));      // 列表
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(150F)));  // 详情
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, S(62F)));   // 状态栏
+            _root = root;
             Controls.Add(root);
+            Resize += delegate { AdjustToolbarRows(); };
 
             // ---- 第一行：按钮 ----
             _bar1 = new FlowLayoutPanel();
             FlowLayoutPanel bar1 = _bar1;
             bar1.Dock = DockStyle.Fill;
             bar1.Padding = new Padding(S(8), S(6), S(8), 0);
-            bar1.AutoSize = true;
-            bar1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            bar1.WrapContents = true;                    // 窗口窄时自动换行，行高跟着长，不切控件
+            bar1.WrapContents = true;                    // 窗口窄时自动换行，行高由 AdjustToolbarRows 算
             bar1.MinimumSize = new Size(0, S(42));
             root.Controls.Add(bar1, 0, 0);
 
@@ -916,8 +929,6 @@ namespace HashTool
             FlowLayoutPanel bar2 = _bar2;
             bar2.Dock = DockStyle.Fill;
             bar2.Padding = new Padding(S(8), S(4), S(8), 0);
-            bar2.AutoSize = true;
-            bar2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             bar2.WrapContents = true;
             bar2.MinimumSize = new Size(0, S(40));
             root.Controls.Add(bar2, 0, 1);
@@ -967,8 +978,6 @@ namespace HashTool
             FlowLayoutPanel bar3 = _bar3;
             bar3.Dock = DockStyle.Fill;
             bar3.Padding = new Padding(S(8), S(2), S(8), 0);
-            bar3.AutoSize = true;
-            bar3.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             bar3.WrapContents = true;
             bar3.MinimumSize = new Size(0, S(36));
             root.Controls.Add(bar3, 0, 2);
@@ -2412,6 +2421,10 @@ namespace HashTool
         /// </summary>
         public string LayoutAudit()
         {
+            // 先按当前宽度把行高调好，再检查 —— 自检对象是"调整之后"的布局
+            AdjustToolbarRows();
+            PerformLayout();
+
             List<string> problems = new List<string>();
             AuditCombo(_cmbAlgo, "「计算算法」下拉框", problems);
             AuditCombo(_cmbCopy, "「Ctrl+C 复制」下拉框", problems);
@@ -2478,7 +2491,54 @@ namespace HashTool
             int needed = lines * tallestChild + panel.Padding.Vertical;
             if (needed > panel.ClientSize.Height)
             {
-                problems.Add(name + "要 " + lines + " 行、共 " + needed + "px 高，但只有 " + panel.ClientSize.Height + "px，会被纵向裁掉");
+                problems.Add(name + "要 " + lines + " 行、每行最高 " + tallestChild + "px，共 " + needed +
+                              "px 高，但只有 " + panel.ClientSize.Height + "px，会被纵向裁掉");
+            }
+        }
+
+        /// <summary>
+        /// 按当前窗口宽度重新计算三行工具栏各自需要多高。
+        /// 窗口够宽时每行一行放得下；窗口窄了 FlowLayoutPanel 会换行，但它的 AutoSize
+        /// 在换行时算不准高度（CI 在 1024x768 上就是这么被切掉的），所以这里自己算：
+        /// 需要几行 × 最高的控件，再留一点边距。
+        /// </summary>
+        private void AdjustToolbarRows()
+        {
+            if (_root == null) return;
+            AdjustToolbarRow(0, _bar1, S(44));
+            AdjustToolbarRow(1, _bar2, S(42));
+            AdjustToolbarRow(2, _bar3, S(38));
+        }
+
+        private void AdjustToolbarRow(int index, FlowLayoutPanel panel, int minimumHeight)
+        {
+            if (panel == null || _root == null || index >= _root.RowStyles.Count) return;
+
+            int available = panel.ClientSize.Width - panel.Padding.Horizontal;
+            if (available <= 0) available = _root.ClientSize.Width - panel.Padding.Horizontal;
+
+            int totalWidth = 0;
+            int tallest = 0;
+            for (int i = 0; i < panel.Controls.Count; i++)
+            {
+                Control child = panel.Controls[i];
+                if (!child.Visible) continue;
+                totalWidth += child.Width + child.Margin.Horizontal;
+                tallest = Math.Max(tallest, child.Height + child.Margin.Vertical);
+            }
+            if (tallest == 0) return;
+
+            int lines = 1;
+            if (available > 0 && panel.WrapContents)
+            {
+                lines = (int)Math.Ceiling((double)totalWidth / available);
+                if (lines < 1) lines = 1;
+            }
+
+            int needed = Math.Max(minimumHeight, lines * tallest + panel.Padding.Vertical + 6);
+            if ((int)Math.Round(_root.RowStyles[index].Height) != needed)
+            {
+                _root.RowStyles[index].Height = needed;
             }
         }
 
@@ -2490,6 +2550,8 @@ namespace HashTool
         public void ResizeForTest(int width, int height)
         {
             ClientSize = new Size(width, height);
+            PerformLayout();
+            AdjustToolbarRows();
             PerformLayout();
         }
     }
