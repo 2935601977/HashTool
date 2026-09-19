@@ -1056,14 +1056,20 @@ namespace HashTool
             root.Controls.Add(detail, 0, 4);
 
             TableLayoutPanel grid = new TableLayoutPanel();
-            grid.Dock = DockStyle.Fill;
+            // 关键：Dock=Top + AutoSize，让表格只占内容需要的高度。
+            // 如果让它 Fill 撑满，多出来的空间会被摊到各行上，
+            // 而单行文本框不会跟着长高（只贴在行的顶部），
+            // 结果就是"字段名和它的值看着不在同一行"。
+            grid.Dock = DockStyle.Top;
+            grid.AutoSize = true;
+            grid.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             grid.Padding = new Padding(S(6), S(4), S(6), S(4));
             grid.ColumnCount = 3;
             grid.RowCount = 3;
             // 标签列按内容自适应：高 DPI 下也不会把"SHA-256"挤成两行
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, FieldLabelColumnWidth()));
             grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92F));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, S(92F)));
             detail.Controls.Add(grid);
 
             _txtDetailName = new TextBox();
@@ -1150,17 +1156,31 @@ namespace HashTool
             return label;
         }
 
-        /// <summary>详情区左侧字段名：自适应宽度、单行、永不折行。</summary>
+        /// <summary>
+        /// 详情区左侧字段名。
+        /// 这里刻意用 Dock=Fill + AutoSize=false：字段名和右边的值框填的是同一个单元格、
+        /// 上下边距也一样，所以两者的垂直中点在几何上必然相同，文字自然对齐。
+        /// （之前用 AutoSize + Anchor=Left 依赖 TableLayoutPanel 的"垂直居中"行为，
+        /// 实测在高 DPI 下会偏移 8~34px，看起来就是"标签和值对不上"。）
+        /// </summary>
         private Label MakeFieldLabel(string text, out Label reference)
         {
             Label label = new Label();
             label.Text = text;
-            label.AutoSize = true;
+            label.AutoSize = false;
+            label.Dock = DockStyle.Fill;
             label.TextAlign = ContentAlignment.MiddleLeft;
-            label.Anchor = AnchorStyles.Left;
-            label.Margin = new Padding(S(3), S(8), S(8), 0);
+            label.Margin = new Padding(S(3), S(4), S(8), S(4));
             reference = label;
             return label;
+        }
+
+        /// <summary>字段名列的宽度：按 "MD5" 和 "SHA-256" 里较宽的那个实测。</summary>
+        private int FieldLabelColumnWidth()
+        {
+            int widest = Math.Max(TextRenderer.MeasureText("MD5", Font).Width,
+                                  TextRenderer.MeasureText("SHA-256", Font).Width);
+            return widest + S(20);
         }
 
         /// <summary>
@@ -1196,7 +1216,7 @@ namespace HashTool
             box.ReadOnly = true;
             box.Dock = DockStyle.Fill;
             box.Font = new Font(fontName, 9.5F, FontStyle.Regular, GraphicsUnit.Point);
-            box.Margin = new Padding(S(3), S(3), S(3), S(3));
+            box.Margin = new Padding(S(3), S(4), S(3), S(4));   // 与左侧字段名的上下边距保持一致，保证同一行对齐
             return box;
         }
 
@@ -2020,44 +2040,41 @@ namespace HashTool
 
         private void UpdateDetails()
         {
+            // 没算的算法，整行（字段名 + 值 + 复制按钮）直接隐藏，
+            // 并在上面那行说明原因，避免只剩一个框让人以为是算失败了。
+            bool md5On = WantMd5;
+            bool shaOn = WantSha256;
+            SetHashRowVisible(_lblFieldMd5, _txtDetailMd5, _btnCopyMd5, md5On);
+            SetHashRowVisible(_lblFieldSha, _txtDetailSha, _btnCopySha, shaOn);
+
+            string algorithmNote = "";
+            if (!md5On) algorithmNote = "    （当前设置：只计算 SHA-256，未显示 MD5）";
+            else if (!shaOn) algorithmNote = "    （当前设置：只计算 MD5，未显示 SHA-256）";
+
             int position = CurrentViewPosition();
             if (position < 0)
             {
-                _txtDetailName.Text = "未选择文件";
-                ShowHashField(_lblFieldMd5, _txtDetailMd5, _btnCopyMd5, WantMd5, "", false, "MD5");
-                ShowHashField(_lblFieldSha, _txtDetailSha, _btnCopySha, WantSha256, "", false, "SHA-256");
+                _txtDetailName.Text = "未选择文件" + algorithmNote;
+                _txtDetailMd5.Text = "";
+                _txtDetailSha.Text = "";
                 return;
             }
+
             FileEntry entry = _entries[_view[position]];
             _txtDetailName.Text = entry.Name + "    " + Const.HumanSize(entry.Size) + "    " +
                                   entry.ModifiedText() + "    [" + entry.StateText() + "]" +
-                                  (entry.Error.Length > 0 ? "  " + entry.Error : "");
+                                  (entry.Error.Length > 0 ? "  " + entry.Error : "") + algorithmNote;
 
             bool upper = _radUpper.Checked;
-            ShowHashField(_lblFieldMd5, _txtDetailMd5, _btnCopyMd5, WantMd5, entry.Md5, upper, "MD5");
-            ShowHashField(_lblFieldSha, _txtDetailSha, _btnCopySha, WantSha256, entry.Sha256, upper, "SHA-256");
+            _txtDetailMd5.Text = md5On ? (upper ? entry.Md5.ToUpperInvariant() : entry.Md5) : "";
+            _txtDetailSha.Text = shaOn ? (upper ? entry.Sha256.ToUpperInvariant() : entry.Sha256) : "";
         }
 
-        /// <summary>
-        /// 详情区的两个哈希框：没启用的算法不显示假的空值，而是明确写「未计算」并灰掉，
-        /// 同时把对应的「复制」按钮禁用（避免复制出一个空串或者占位文字）。
-        /// 保留两行不隐藏，是为了切换算法时下面的版面不会跳来跳去。
-        /// </summary>
-        private static void ShowHashField(Label label, TextBox box, Button copyButton,
-                                          bool active, string value, bool upper, string name)
+        private static void SetHashRowVisible(Label label, TextBox box, Button copyButton, bool visible)
         {
-            if (label != null) label.ForeColor = active ? SystemColors.ControlText : SystemColors.GrayText;
-            if (copyButton != null) copyButton.Enabled = active;
-            if (box == null) return;
-
-            if (!active)
-            {
-                box.ForeColor = SystemColors.GrayText;
-                box.Text = "（未计算：当前算法只算 " + (name == "MD5" ? "SHA-256" : "MD5") + "）";
-                return;
-            }
-            box.ForeColor = SystemColors.WindowText;
-            box.Text = upper ? value.ToUpperInvariant() : value;
+            if (label != null) label.Visible = visible;
+            if (box != null) box.Visible = visible;
+            if (copyButton != null) copyButton.Visible = visible;
         }
 
         private int CurrentViewPosition()
@@ -2362,7 +2379,25 @@ namespace HashTool
                 result += "；SHA-256 值框 " + have + "px / 需要 " + need + "px";
             }
 
+            // 标签和它的值必须在同一水平线上（差 3px 以内算对齐）
+            string align = CheckLabelAlign("MD5", _lblFieldMd5, _txtDetailMd5);
+            if (align.Length > 0) { ok = false; result += "；" + align; }
+            align = CheckLabelAlign("SHA-256", _lblFieldSha, _txtDetailSha);
+            if (align.Length > 0) { ok = false; result += "；" + align; }
+
             return (ok ? "OK：" : "不合格：") + result;
+        }
+
+        /// <summary>标签垂直中点 vs 值框垂直中点，偏差超过 3px 就算没对齐。</summary>
+        private string CheckLabelAlign(string name, Label label, TextBox box)
+        {
+            if (label == null || box == null || !label.Visible || !box.Visible) return "";
+            int labelCenter = label.Top + label.Height / 2;
+            int boxCenter = box.Top + box.Height / 2;
+            int diff = Math.Abs(labelCenter - boxCenter);
+            if (diff <= S(3)) return "";
+            return name + " 标签和值框没对齐（标签 top/高 = " + label.Top + "/" + label.Height +
+                   "，值框 top/高 = " + box.Top + "/" + box.Height + "，相差 " + diff + "px）";
         }
 
         public void RefreshForTest() { RefreshAll(); }
@@ -2407,12 +2442,23 @@ namespace HashTool
                    " all=" + (_miCopyAllJson.Enabled ? "1" : "0");
         }
 
-        /// <summary>测试用：详情区两个哈希框当前显示的文字。</summary>
+        /// <summary>测试用：详情区两个哈希框当前显示的文字和可见性。</summary>
         public string DetailFieldsForTest()
         {
-            return "md5=[" + _txtDetailMd5.Text + "] sha=[" + _txtDetailSha.Text +
-                   "] md5copy=" + (_btnCopyMd5.Enabled ? "1" : "0") +
-                   " shacopy=" + (_btnCopySha.Enabled ? "1" : "0");
+            return "md5row=" + RowVisibility(_lblFieldMd5, _txtDetailMd5, _btnCopyMd5) +
+                   " sharow=" + RowVisibility(_lblFieldSha, _txtDetailSha, _btnCopySha) +
+                   " md5=[" + _txtDetailMd5.Text + "] sha=[" + _txtDetailSha.Text + "]" +
+                   " name=[" + _txtDetailName.Text + "]";
+        }
+
+        private static string RowVisibility(Label label, TextBox box, Button copyButton)
+        {
+            bool anyVisible = (label != null && label.Visible) || (box != null && box.Visible) ||
+                              (copyButton != null && copyButton.Visible);
+            bool allVisible = (label == null || label.Visible) && (box == null || box.Visible) &&
+                              (copyButton == null || copyButton.Visible);
+            if (!anyVisible) return "hidden";
+            return allVisible ? "shown" : "partial";
         }
 
         /// <summary>
@@ -2898,11 +2944,17 @@ namespace HashTool
                         check(narrow.Length == 0, "窗口缩到最小尺寸也不裁" + (narrow.Length > 0 ? "：" + narrow : ""));
                         form.ResizeForTest(1280, 760);
 
-                        // 只算一个算法时，详情区要说清楚另一个没算
+                        // 只算一个算法时：没算的那一行整行隐藏，并在上面说明原因
                         form.SetAlgorithm(2);                // 仅 SHA-256
                         string onlySha = form.DetailFieldsForTest();
-                        check(onlySha.IndexOf("未计算") >= 0 && onlySha.IndexOf("md5copy=0") >= 0,
-                              "只算 SHA-256 时 MD5 框明确标注未计算并禁用复制：" + onlySha);
+                        check(onlySha.IndexOf("md5row=hidden") >= 0 && onlySha.IndexOf("sharow=shown") >= 0,
+                              "只算 SHA-256 时 MD5 整行隐藏（含标签和复制按钮）：" + onlySha);
+                        check(onlySha.IndexOf("只计算 SHA-256") >= 0,
+                              "并在文件名那行说明当前只算哪个算法：" + onlySha);
+                        form.SetAlgorithm(1);                // 仅 MD5
+                        string onlyMd5 = form.DetailFieldsForTest();
+                        check(onlyMd5.IndexOf("md5row=shown") >= 0 && onlyMd5.IndexOf("sharow=hidden") >= 0,
+                              "只算 MD5 时 SHA-256 整行隐藏：" + onlyMd5);
                         form.SetAlgorithm(0);                // 恢复成两个都算
                         note("导出小写 / 大写 JSON");
                         bool lowerOk = form.ExportTo(outPrefix + ".json");
