@@ -681,6 +681,17 @@ namespace HashTool
                 Console.WriteLine("scan recursive : " + recursiveCount + " (期望 3)");
                 Console.WriteLine("scan flat      : " + flatCount + " (期望 1)");
                 ok = ok && recursiveCount == 3 && flatCount == 1;
+
+                // 启动参数解析：拖到 exe 图标上时路径是从命令行来的，不能被当成开关丢掉
+                string[] parsed = Program.CollectStartupPaths(new string[] {
+                    Environment.CurrentDirectory,      // 存在的文件夹 → 要收下
+                    sample,                            // 存在的文件   → 要收下
+                    "--selftest",                      // 开关         → 跳过
+                    @"D:\这个路径不存在\xyz",           // 不存在的路径 → 跳过
+                    ""
+                });
+                Console.WriteLine("startup paths  : " + parsed.Length + " (期望 2)");
+                ok = ok && parsed.Length == 2;
             }
             catch (Exception ex)
             {
@@ -790,6 +801,17 @@ namespace HashTool
             TrySetAppIcon();
         }
 
+        /// <summary>
+        /// 记住「把文件/文件夹拖到 exe 图标上」时 Windows 传进来的路径参数，
+        /// 等窗口显示出来再加进列表（那时界面和计时器都就绪了）。
+        /// </summary>
+        private string[] _startupPaths;
+
+        public void SetStartupPaths(string[] paths)
+        {
+            _startupPaths = (paths == null || paths.Length == 0) ? null : paths;
+        }
+
         /// <summary>窗口比屏幕还大时（小屏 + 高缩放）自动收进来，别跑到屏幕外。</summary>
         protected override void OnShown(EventArgs e)
         {
@@ -808,6 +830,14 @@ namespace HashTool
                 }
             }
             catch (Exception) { }
+
+            // 拖到 exe 图标上启动的：把命令行里的文件/文件夹直接加进来，并自动开始计算
+            if (_startupPaths != null)
+            {
+                string[] paths = _startupPaths;
+                _startupPaths = null;
+                AddRoots(paths);
+            }
         }
 
         /// <summary>窗口/任务栏图标直接用 exe 里带的那个图标。</summary>
@@ -2646,8 +2676,41 @@ namespace HashTool
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+
+            // 把文件或文件夹直接拖到 exe 图标上时，Windows 是用命令行参数把路径传进来的，
+            // 所以这里要把这些参数当成待计算的文件。
+            MainForm form = new MainForm();
+            form.SetStartupPaths(CollectStartupPaths(args));
+            Application.Run(form);
             return 0;
+        }
+
+        /// <summary>
+        /// 从命令行参数里挑出「存在」的文件/文件夹路径（不是 -- 开头的开关）。
+        /// 拖到 exe 图标上、或者用 "HashTool.exe D:\某个文件夹" 启动时都会用到。
+        /// </summary>
+        internal static string[] CollectStartupPaths(string[] args)
+        {
+            List<string> paths = new List<string>();
+            if (args == null) return paths.ToArray();
+
+            for (int i = 0; i < args.Length; i++)
+            {
+                string arg = args[i];
+                if (string.IsNullOrEmpty(arg)) continue;
+                if (arg.StartsWith("--") || arg.StartsWith("-")) continue;
+
+                // 拖拽时路径可能带引号（个别环境会带上），去掉再判断
+                string path = arg.Trim().Trim('"');
+                if (path.Length == 0) continue;
+
+                try
+                {
+                    if (File.Exists(path) || Directory.Exists(path)) paths.Add(path);
+                }
+                catch (Exception) { }
+            }
+            return paths.ToArray();
         }
 
         private static bool IsHex(string text)
@@ -2827,6 +2890,8 @@ namespace HashTool
             }
 
             MainForm form = new MainForm();
+            // 模拟「把文件夹拖到 exe 图标上」：路径当启动参数交给窗口，OnShown 时自动加入并计算
+            form.SetStartupPaths(new string[] { tree });
             int result = 9;
             int step = 0;
             int ticks = 0;
@@ -2862,8 +2927,11 @@ namespace HashTool
                 switch (step)
                 {
                     case 0:
-                        note("添加测试目录：" + tree);
-                        form.AddPathsForTest(new string[] { tree });
+                        // 这一步特意走「把文件夹拖到 exe 图标上」的真实路径：
+                        // 路径是通过 SetStartupPaths 传进来、由 OnShown 自动加入并开始计算的，
+                        // 不是我们手动调 AddRoots。
+                        check(form.EntryCount == 3 || form.IsComputing,
+                              "启动参数里的文件夹被自动加入并开始计算（当前 " + form.EntryCount + " 个文件）");
                         waiting = true;
                         step = 1;
                         return;
