@@ -3,7 +3,7 @@
 本项目的版本变更都记在这里，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [1.1.1] - 2026-09-19
 
 ### 修复
 - **把文件 / 文件夹拖到 exe 图标上不生效**：Windows 是通过「启动参数」把路径传给程序的，

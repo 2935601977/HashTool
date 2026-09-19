@@ -68,7 +68,7 @@ namespace HashTool
         /// 保持和 git tag 一致（tag 是 v1.1.0，这里就是 1.1.0），
         /// Release 流程会校验两者是否一致，不一致直接拒绝发布。
         /// </summary>
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
 
         /// <summary>.NET 程序集版本必须是 4 段数字，所以从 Version 派生补一个 .0。</summary>
         public const string AssemblyVersion4 = Version + ".0";
