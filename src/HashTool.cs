@@ -39,14 +39,20 @@ using System.Windows.Forms;
 
 // ----------------------------------------------------------------------------
 //  程序集信息：编译进 exe，在「右键 → 属性 → 详细信息」里能看到
+//
+//  版本号只在 Const.Version 改一处，下面这些都从它派生：
+//    * 窗口标题 / --version / 导出的 JSON / 自检输出
+//    * 程序集版本（.NET 要求 4 段，自动补 .0）
+//    * 产品版本（就是 Const.Version 本身，和 git tag 保持一致）
 // ----------------------------------------------------------------------------
 [assembly: AssemblyTitle("HashTool —— 哈希校验工具")]
 [assembly: AssemblyDescription("桌面版 MD5 / SHA-256 计算工具")]
 [assembly: AssemblyProduct("HashTool")]
 [assembly: AssemblyCompany("wangxiaobao")]
 [assembly: AssemblyCopyright("Copyright © 2026 wangxiaobao")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion(HashTool.Const.AssemblyVersion4)]
+[assembly: AssemblyFileVersion(HashTool.Const.AssemblyVersion4)]
+[assembly: AssemblyInformationalVersion(HashTool.Const.Version)]
 
 namespace HashTool
 {
@@ -56,7 +62,17 @@ namespace HashTool
     internal static class Const
     {
         public const string AppName = "HashTool";
+
+        /// <summary>
+        /// ★ 版本号：全项目唯一的一份，改版本只改这一行。
+        /// 保持和 git tag 一致（tag 是 v1.1.0，这里就是 1.1.0），
+        /// Release 流程会校验两者是否一致，不一致直接拒绝发布。
+        /// </summary>
         public const string Version = "1.1.0";
+
+        /// <summary>.NET 程序集版本必须是 4 段数字，所以从 Version 派生补一个 .0。</summary>
+        public const string AssemblyVersion4 = Version + ".0";
+
         public const string Author = "wangxiaobao";
         public const string Title = "哈希校验工具 · MD5 / SHA-256";
         public const int ChunkSize = 1024 * 1024;        // 1 MiB 分块

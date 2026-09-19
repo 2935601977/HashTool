@@ -3,6 +3,15 @@
 本项目的版本变更都记在这里，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+### 变更
+- **版本号收敛成单一定义**：只改 `src/HashTool.cs` 里的 `Const.Version` 一处，
+  窗口标题、`--version`、导出的 JSON、程序集版本（自动补成 4 段的 `1.1.0.0`）
+  和产品版本（`1.1.0`，与 git tag 一致）全部自动跟随。
+- Release 流程新增校验：**tag 和代码里的 `Const.Version` 不一致时直接拒绝发布**。
+- 删除英文 README，只保留中文主页。
+
 ## [1.1.0] - 2026-09-18
 
 ### 新增

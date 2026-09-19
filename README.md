@@ -235,4 +235,4 @@ docs/                  README 用的图片
 
 ---
 
-<sub>[English summary](README.en.md) · 用 Windows 自带的东西做的哈希工具，130 KB，无依赖。</sub>
+<sub>用 Windows 自带的东西做的哈希工具：单文件、无依赖、不装运行时。</sub>

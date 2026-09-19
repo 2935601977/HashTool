@@ -27,6 +27,17 @@ jobs:
         shell: cmd
         run: dist\HashTool.exe --selftest
 
+      - name: 检查 tag 和代码里的版本号是否一致
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $expected = $tag.TrimStart('v')
+          $actual = (cmd /c "dist\HashTool.exe --version") -join " "
+          if ($actual -notmatch [regex]::Escape("HashTool $expected")) {
+            throw "tag 是 $tag（期望版本 $expected），但 exe 里报的是「$actual」——请先改 src\HashTool.cs 里的 Const.Version 并提交，再重新打 tag"
+          }
+          Write-Host "版本号一致：tag=$tag，exe=$actual"
+
       - name: 生成 SHA-256 校验文件
         shell: pwsh
         run: |

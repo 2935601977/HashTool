@@ -55,10 +55,18 @@ dist\HashTool.exe --screenshot docs\screenshot.png
 
 ## 发布流程（维护者）
 
-1. 更新 `CHANGELOG.md` 和 `src/HashTool.cs` 里的 `Const.Version`
-2. 提交：`git commit -m "release: v1.2.0"`
-3. 打 tag 并推送：`git tag v1.2.0 && git push origin main --tags`
-4. GitHub Actions 会自动编译、自检、把 `HashTool.exe` 和它的 SHA-256 附到 Release 上
+1. **改版本号：只改 `src/HashTool.cs` 里的 `Const.Version` 一行**（比如改成 `"1.2.0"`）。
+   窗口标题、`--version`、导出的 JSON、自检输出、程序集版本全都从它派生，别处不用动。
+   （exe 属性里「文件版本」显示 `1.2.0.0` 是 .NET 强制 4 段自动补的，
+   「产品版本」显示 `1.2.0`，和 tag 一致。）
+2. 在 `CHANGELOG.md` 里把「未发布」那一节整理成本次版本号。
+3. 提交：`git commit -m "release: v1.2.0"`
+4. 打 tag 并推送：`git tag v1.2.0 && git push origin v1.2.0`
+   （tag 名必须和 `Const.Version` 一致，只是前面多个 `v`）
+5. GitHub Actions 会自动编译、自检、校验版本号、把 `HashTool.exe` 和它的 SHA-256 附到 Release 上
+
+> **版本号写漏了会怎样？** Release 流程里有一道检查：拿 tag 和 exe 自己报的 `--version` 比对，
+> 不一致就直接失败并提示你改 `Const.Version`，所以不会出现「tag 是 v1.2.0、程序里还写着 1.1.0」这种事。
 
 `release.yml` 只在推 `v*` 的 tag 时触发，平时的提交只会跑 `build.yml`（编译 + 自检，不发布）。
 想删掉打错的 tag：`git tag -d v1.2.0 && git push origin :refs/tags/v1.2.0`。
